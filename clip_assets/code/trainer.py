@@ -26,10 +26,10 @@ class Trainer(object):
             print(f"CUDA is available. Using GPU: {torch.cuda.get_device_name(0)}")
         else:
             print("CUDA is not available. Falling back to CPU.")
-        
+
+        # ImageEncoder 用來將原始圖像轉換成高維的特徵向量，然後將這些特徵傳遞到分類頭（classification_head）進行最終的分類
         self.image_encoder = ImageEncoder(args, keep_lang=False)
         self.classification_head = get_classification_head(args, args.train_dataset)
-
         self.model = ImageClassifier(self.image_encoder, self.classification_head)
         self.model.freeze_head()
 
@@ -93,7 +93,7 @@ class Trainer(object):
         torch.save(self.pruner.get_prune_mask(), os.path.join(output_dir, "{}_mask_{}_{}.pt".format(prefix, self.args.train_dataset, self.pruner.get_sparsity_ratio()))) # 返回模型剪枝時使用的掩碼（mask）
         
     def evaluate_model(self):
-        results = eval_single_dataset(self.image_encoder, self.args.train_dataset, self.args)
+        results = eval_single_dataset(self.image_encoder, self.args.train_dataset, self.args) # 僅評估圖像特徵提取的效果
         return results
 
     def train_epoch(self, prob = 1.0, seed = 99):
