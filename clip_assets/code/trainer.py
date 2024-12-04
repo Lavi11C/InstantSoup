@@ -35,15 +35,17 @@ class Trainer(object):
 
         preprocess_fn = self.model.train_preprocess
         self.print_every = 100 # 跑100次batch_size就印一次進度
+        
         self.dataset = get_dataset(
             args.train_dataset, # defalt MNIST
             preprocess_fn,
             location=args.data_location, # 資料集的位置
             batch_size=args.batch_size
         )
-        num_batches = len(self.dataset.train_loader) # 計算總訓練步數
-        self.data_loader = get_dataloader(
-            self.dataset, is_train=True, args=args, image_encoder=None)
+        
+        num_batches = len(self.dataset.train_loader) # 計算總訓練步數 ?
+        
+        self.data_loader = get_dataloader(self.dataset, is_train=True, args=args, image_encoder=None) # 對應LIFT build_data_loader
 
         # devices = list(range(torch.cuda.device_count()))
         # print('Using devices', devices)
@@ -56,13 +58,13 @@ class Trainer(object):
         self.model = self.model.to(self.device)
         print(f"Using device: {self.device}")
 
-
+        # loss值 對應LIFT的build_criterion
         if args.ls > 0:
             self.loss_fn = LabelSmoothing(args.ls) # 給予正類標籤一個略小於1的值，這樣可以減少模型對訓練數據過擬合的風險(範圍0~1)
         else:
             self.loss_fn = torch.nn.CrossEntropyLoss()
 
-        self.params = [p for p in self.model.parameters() if p.requires_grad]
+        self.params = [p for p in self.model.parameters() if p.requires_grad] # 篩選出那些需要計算梯度的參數
         self.optimizer = torch.optim.AdamW(self.params, lr = self.lr, weight_decay = args.wd)
         self.t_total = args.epochs * num_batches
         #  線性暖身（linear warmup）->在訓練的初期逐步增加學習率，直到達到指定的學習率。
