@@ -4,10 +4,10 @@ from tqdm import tqdm
 
 import clip.clip as clip
 
-from src.datasets.templates import get_templates
-from src.datasets.registry import get_dataset
+from datasets.templates import get_templates
+from datasets.registry import get_dataset
 
-from src.modeling import ClassificationHead, ImageEncoder
+from modeling import ClassificationHead, ImageEncoder
 
 
 def build_classification_head(model, dataset_name, template, data_location, device):
