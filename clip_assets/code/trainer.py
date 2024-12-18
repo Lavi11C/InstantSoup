@@ -7,12 +7,14 @@ from misc import print_info
 from pruner import Pruner
 from modeling import ImageEncoder, ImageClassifier
 from heads import get_classification_head
-from datasets.registry import get_dataset
+# from datasets.registry import get_dataset
 from utils import cosine_lr, LabelSmoothing
 from eval import eval_single_dataset, evaluate
-from datasets.common import get_dataloader, maybe_dictionarize
+# from datasets.common import get_dataloader, maybe_dictionarize
 from tqdm import tqdm
 from transformers import AdamW, get_linear_schedule_with_warmup
+
+from torchvision import datasets, transforms
 
 class Trainer(object):
     def __init__(self, args):
@@ -26,26 +28,41 @@ class Trainer(object):
             print(f"CUDA is available. Using GPU: {torch.cuda.get_device_name(0)}")
         else:
             print("CUDA is not available. Falling back to CPU.")
-
-        # ImageEncoder 用來將原始圖像轉換成高維的特徵向量，然後將這些特徵傳遞到分類頭（classification_head）進行最終的分類
+        
         self.image_encoder = ImageEncoder(args, keep_lang=False)
+
+        # 如果指定了預訓練模型路徑(新家)
+        if hasattr(args, 'pretrained_model') and args.pretrained_model:
+            print(f"Loading pretrained model from {args.pretrained_model}")
+            pretrained_dict = torch.load(args.pretrained_model)
+            
+            # 如果是標準的 .pth 文件
+            if isinstance(pretrained_dict, dict):
+                # 只加載與當前模型匹配的參數
+                model_dict = self.image_encoder.state_dict()
+                pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+                model_dict.update(pretrained_dict)
+                self.image_encoder.load_state_dict(model_dict)
+            else:
+                # 如果是整個模型對象
+                self.image_encoder = pretrained_dict
+        
         self.classification_head = get_classification_head(args, args.train_dataset)
+
         self.model = ImageClassifier(self.image_encoder, self.classification_head)
         self.model.freeze_head()
 
         preprocess_fn = self.model.train_preprocess
-        self.print_every = 100 # 跑100次batch_size就印一次進度
-        
+        self.print_every = 1000 # 跑1000次batch_size就印一次進度
         self.dataset = get_dataset(
-            args.train_dataset, # defalt MNIST
+            args.train_dataset, # defalt imagenet
             preprocess_fn,
             location=args.data_location, # 資料集的位置
             batch_size=args.batch_size
         )
-        
-        num_batches = len(self.dataset.train_loader) # 計算總訓練步數 ?
-        
-        self.data_loader = get_dataloader(self.dataset, is_train=True, args=args, image_encoder=None) # 對應LIFT build_data_loader
+        num_batches = len(self.dataset.train_loader) # 計算總訓練步數
+        self.data_loader = get_dataloader(
+            self.dataset, is_train=True, args=args, image_encoder=None)
 
         # devices = list(range(torch.cuda.device_count()))
         # print('Using devices', devices)
@@ -58,13 +75,13 @@ class Trainer(object):
         self.model = self.model.to(self.device)
         print(f"Using device: {self.device}")
 
-        # loss值 對應LIFT的build_criterion
+
         if args.ls > 0:
             self.loss_fn = LabelSmoothing(args.ls) # 給予正類標籤一個略小於1的值，這樣可以減少模型對訓練數據過擬合的風險(範圍0~1)
         else:
             self.loss_fn = torch.nn.CrossEntropyLoss()
 
-        self.params = [p for p in self.model.parameters() if p.requires_grad] # 篩選出那些需要計算梯度的參數
+        self.params = [p for p in self.model.parameters() if p.requires_grad]
         self.optimizer = torch.optim.AdamW(self.params, lr = self.lr, weight_decay = args.wd)
         self.t_total = args.epochs * num_batches
         #  線性暖身（linear warmup）->在訓練的初期逐步增加學習率，直到達到指定的學習率。
@@ -94,12 +111,27 @@ class Trainer(object):
         # torch.save(self.optimizer, os.path.join(output_dir, "optimizer.pt"))
         torch.save(self.pruner.get_prune_mask(), os.path.join(output_dir, "{}_mask_{}_{}.pt".format(prefix, self.args.train_dataset, self.pruner.get_sparsity_ratio()))) # 返回模型剪枝時使用的掩碼（mask）
         
+    # def evaluate_model(self):
+    #     results = eval_single_dataset(self.image_encoder, self.args.train_dataset, self.args)
+    #     return results
     def evaluate_model(self):
-        results = eval_single_dataset(self.image_encoder, self.args.train_dataset, self.args) # 僅評估圖像特徵提取的效果
+        results = eval_single_dataset(
+            self.image_encoder, 
+            self.args.train_dataset,
+            self.args,
+            split='val'  # 指定使用驗證集
+        )
         return results
 
     def train_epoch(self, prob = 1.0, seed = 99):
-        print_info("Training Epoch => {} || Learning Rate => {} || Current Loss => {:.3f}".format(self.epoch_trained + 1, self.scheduler._last_lr, self.training_loss[self.epoch_trained]))
+        # MNIST
+        # print_info("Training Epoch => {} || Learning Rate => {} || Current Loss => {:.3f}".format(self.epoch_trained + 1, self.scheduler._last_lr, self.training_loss[self.epoch_trained]))
+
+        # ImageNet
+        print_info(f"Training Epoch => {self.epoch_trained + 1} || "
+              f"Learning Rate => {self.scheduler._last_lr} || "
+              f"Current Loss => {self.training_loss[self.epoch_trained]} || "
+              f"Dataset => {self.args.train_dataset}")
         
         epoch_loss = 0.0
         random.seed(seed)
