@@ -12,9 +12,17 @@ class ImageEncoder(torch.nn.Module):
         print(f'Loading {args.model} pre-trained weights.')
         self.model, self.train_preprocess, self.val_preprocess = clip.load(
             args.model, args.device, jit=False)
+
+        # 根據模型名稱設置輸出維度
+        if 'ViT-L/14' in args.model:
+            self.output_dim = 768
+        elif 'ViT-B' in args.model:  # 包含 ViT-B/32 和 ViT-B/16
+            self.output_dim = 512
+        else:
+            # 如果是其他模型，可以透過查看模型的視覺投影層得到輸出維度
+            self.output_dim = self.model.visual.output_dim
         
         self.cache_dir = args.cache_dir
-
         if not keep_lang and hasattr(self.model, 'transformer'):
             delattr(self.model, 'transformer')
 
