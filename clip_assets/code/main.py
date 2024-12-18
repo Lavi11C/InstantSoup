@@ -1,18 +1,17 @@
 import os
-import sys
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 import numpy as np
 import torch
 import copy
 from trainer import Trainer
 from args import parse_arguments
 
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+
 # 合併掩碼字典 -> 綜合多個策略的結果，保留重要權重
 def merge_dicts(mask_dicts):
     merged_mask = {}
     model_keys = mask_dicts[0].keys()
     for key in model_keys:
-        # print_info("Key : {} \t\t Similarity Ratio : {} %".format(key, (1 - torch.sum(mask_dicts[0][key] != mask_dicts[1][key])/mask_dicts[0][key].numel()) * 100))
         merged_mask[key] = copy.deepcopy(torch.clip(mask_dicts[0][key] + mask_dicts[1][key] + mask_dicts[2][key] + 
                                                     mask_dicts[3][key] + mask_dicts[4][key], 0, 1)) # torch.clip將結果限制在 [0, 1] 範圍內
     del mask_dicts
@@ -22,7 +21,7 @@ def main():
     args = parse_arguments()
 
     # 記錄模型訓練或剪枝過程的參數與結果
-    fopen = open("logs/ours_Cars_EuroSAT_SVHN_KITTI.txt", "a")
+    fopen = open(f"logs/imagenet_pruning_{args.target_sparsity}.txt", "a")
     
     main_trainer = Trainer(args)
     main_trainer.pruner.prune_model(0.0) # 初始化
@@ -68,8 +67,6 @@ def main():
         main_trainer.pruner.prune_model_custom(merged_mask) # 主訓練器模型會根據所有5次訓練和剪枝的結果進行最終的剪枝操作。
         fopen.flush()
 
-    # main_trainer.save_model()
-
     remaining_sparsity = args.target_sparsity - current_sparsity # 計算剩餘的稀疏度
     if remaining_sparsity > 0: # 如果還有剩餘的稀疏度，則進一步進行剪枝操作。
         print("Remaining Sparsity: {}".format(remaining_sparsity))
@@ -80,14 +77,22 @@ def main():
     for i in range(0, 15):
         main_trainer.train_epoch(1.0, args.seed)
         res = main_trainer.evaluate_model() # 評估模型
-        fopen.write("Main Trainer {} sparsity : {:.4} % and performance : {}\n".format(i, main_trainer.pruner.get_sparsity_ratio(), res))
+        # fopen.write("Main Trainer {} sparsity : {:.4} % and performance : {}\n".format(i, main_trainer.pruner.get_sparsity_ratio(), res))
+        fopen.write("Main Trainer {} sparsity : {:.4f} % and performance : head={:.2f}%, medium={:.2f}%, tail={:.2f}%, overall={:.2f}%\n".format(
+            i, 
+            main_trainer.pruner.get_sparsity_ratio(),
+            res['head_accuracy'],
+            res['medium_accuracy'],
+            res['tail_accuracy'],
+            res['overall_accuracy']
+        ))
         fopen.flush()
-        max_log.append(res["top1"])
+        max_log.append(res["overall_accuracy"])
 
     fopen.write("{}".format(max_log))
     fopen.write(f"\nSparsity: {main_trainer.pruner.get_sparsity_ratio()} \t Result: {max(max_log)}\n\n")
     fopen.close()
-    # main_trainer.save_model()
+    main_trainer.save_model()
 
     # trainer = Trainer(args)
     # print("Trainer Created")
