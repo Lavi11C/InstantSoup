@@ -8,18 +8,25 @@ def parse_arguments():
     parser.add_argument(
         "--data-location",
         type=str,
-        default=os.path.expanduser('~/data'),
+        default=os.path.expanduser('/workspace/LIFT/Dataset/ImageNet'),
         help="The root directory for the datasets.",
     )
+    # parser.add_argument(
+    #     "--eval-datasets",
+    #     default="MNIST",
+    #     type=lambda x: x.split(","),
+    #     help="Which datasets to use for evaluation. Split by comma, e.g. MNIST,EuroSAT. "
+    # )
     parser.add_argument(
-        "--eval-datasets",
-        default="MNIST",
-        type=lambda x: x.split(","),
-        help="Which datasets to use for evaluation. Split by comma, e.g. MNIST,EuroSAT. "
+        "--eval-split",
+        default="val",
+        type=str,
+        choices=['val', 'test'],
+        help="Which split to use for evaluation (validation or test set)"
     )
     parser.add_argument(
         "--train-dataset",
-        default="MNIST",
+        default="imagenet",
         help="Which dataset to patch on.",
     )
     parser.add_argument(
@@ -37,8 +44,15 @@ def parse_arguments():
     parser.add_argument(
         "--model",
         type=str,
-        default="ViT-B/32",
+        default="ViT-L/14",
         help="The type of model (e.g. RN50, ViT-B/32).",
+    )
+    # pretrained model測試
+    parser.add_argument(
+        "--pretrained_model",
+        type=str,
+        default=None,
+        help="Path to pretrained model .pth.tar file"
     )
     parser.add_argument(
         "--batch-size",
@@ -60,7 +74,7 @@ def parse_arguments():
     parser.add_argument(
         "--target_sparsity",
         type=float,
-        default=30.0,
+        default=70.0,
         help="Desired Target Sparsity."
     )
     parser.add_argument(
