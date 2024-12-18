@@ -30,6 +30,12 @@ def parse_arguments():
         help="Which dataset to patch on.",
     )
     parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=4,
+        help="數據加載的工作線程數量"
+    )
+    parser.add_argument(
         "--exp_name",
         type=str,
         default=None,
